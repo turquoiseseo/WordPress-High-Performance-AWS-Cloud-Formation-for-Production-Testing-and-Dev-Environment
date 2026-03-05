@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Development WordPress on AWS using EKS, Aurora, EFS, ALB (Docker + Kubernetes, no CloudFront)
+Description: Test WordPress on AWS using EKS, Aurora, EFS, ALB (no CloudFront, smaller footprint)
 
 Parameters:
   DBUsername:
@@ -10,10 +10,10 @@ Parameters:
     NoEcho: true
   SSLCertificateArn:
     Type: String
-    Description: ACM certificate for ALB
+    Description: ACM certificate for ALB (test)
   WPDomainName:
     Type: String
-    Description: Dev domain name (e.g. dev.example.com)
+    Description: Test domain name (e.g. test.example.com)
 
 Mappings:
   AZMap:
@@ -23,19 +23,15 @@ Mappings:
 
 Resources:
 
-  ############################################
-  # VPC + Subnets
-  ############################################
-
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.30.0.0/16
+      CidrBlock: 10.1.0.0/16
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: dev-vpc
+          Value: test-vpc
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -50,67 +46,63 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.30.0.0/24
+      CidrBlock: 10.1.0.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ1]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: dev-public-az1
+          Value: test-public-az1
 
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.30.1.0/24
+      CidrBlock: 10.1.1.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ2]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: dev-public-az2
+          Value: test-public-az2
 
   PrivateAppSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.30.10.0/24
+      CidrBlock: 10.1.10.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ1]
       Tags:
         - Key: Name
-          Value: dev-app-az1
+          Value: test-app-az1
 
   PrivateAppSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.30.11.0/24
+      CidrBlock: 10.1.11.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ2]
       Tags:
         - Key: Name
-          Value: dev-app-az2
+          Value: test-app-az2
 
   PrivateDataSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.30.20.0/24
+      CidrBlock: 10.1.20.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ1]
       Tags:
         - Key: Name
-          Value: dev-data-az1
+          Value: test-data-az1
 
   PrivateDataSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.30.21.0/24
+      CidrBlock: 10.1.21.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ2]
       Tags:
         - Key: Name
-          Value: dev-data-az2
-
-  ############################################
-  # NAT + Routing
-  ############################################
+          Value: test-data-az2
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -124,13 +116,13 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
-  PublicSubnet1Assoc:
+  PublicSubnet1RouteTableAssoc:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicSubnet1
       RouteTableId: !Ref PublicRouteTable
 
-  PublicSubnet2Assoc:
+  PublicSubnet2RouteTableAssoc:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicSubnet2
@@ -171,14 +163,10 @@ Resources:
       SubnetId: !Ref PrivateAppSubnet2
       RouteTableId: !Ref PrivateAppRouteTable
 
-  ############################################
-  # Security Groups
-  ############################################
-
   ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: ALB SG
+      GroupDescription: Test ALB SG
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -193,15 +181,11 @@ Resources:
   EKSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: EKS nodes SG
+      GroupDescription: Test EKS nodes SG
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: -1
           SourceSecurityGroupId: !Ref ALBSecurityGroup
-
-  ############################################
-  # EKS Cluster + Node Group
-  ############################################
 
   EKSClusterRole:
     Type: AWS::IAM::Role
@@ -219,7 +203,7 @@ Resources:
   EKSCluster:
     Type: AWS::EKS::Cluster
     Properties:
-      Name: dev-eks
+      Name: test-eks
       Version: "1.29"
       RoleArn: !GetAtt EKSClusterRole.Arn
       ResourcesVpcConfig:
@@ -250,24 +234,20 @@ Resources:
       ClusterName: !Ref EKSCluster
       NodeRole: !GetAtt EKSNodeRole.Arn
       ScalingConfig:
-        DesiredSize: 1
+        DesiredSize: 2
         MinSize: 1
-        MaxSize: 3
+        MaxSize: 4
       Subnets:
         - !Ref PrivateAppSubnet1
         - !Ref PrivateAppSubnet2
       InstanceTypes:
-        - t3.small
+        - t3.medium
       AmiType: AL2_x86_64
-
-  ############################################
-  # Aurora MySQL
-  ############################################
 
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: dev db subnets
+      DBSubnetGroupDescription: test db subnets
       SubnetIds:
         - !Ref PrivateDataSubnet1
         - !Ref PrivateDataSubnet2
@@ -287,18 +267,17 @@ Resources:
     Type: AWS::RDS::DBInstance
     Properties:
       DBClusterIdentifier: !Ref DBCluster
-      DBInstanceClass: db.t4g.small
+      DBInstanceClass: db.t3.medium
       Engine: aurora-mysql
-
-  ############################################
-  # EFS for wp-content
-  ############################################
 
   EFSFileSystem:
     Type: AWS::EFS::FileSystem
     Properties:
       Encrypted: true
       PerformanceMode: generalPurpose
+      Tags:
+        - Key: Name
+          Value: test-efs
 
   EFSMountTarget1:
     Type: AWS::EFS::MountTarget
@@ -316,14 +295,10 @@ Resources:
       SecurityGroups:
         - !Ref EKSSecurityGroup
 
-  ############################################
-  # ALB
-  ############################################
-
   ALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: dev-alb
+      Name: test-alb
       Scheme: internet-facing
       Subnets:
         - !Ref PublicSubnet1
@@ -369,9 +344,13 @@ Resources:
 Outputs:
   ALBDNS:
     Value: !GetAtt ALB.DNSName
-  DevURL:
-    Value: !Sub "https://${ALBDNS}"
   EKSClusterName:
     Value: !Ref EKSCluster
   AuroraEndpoint:
     Value: !GetAtt DBCluster.Endpoint.Address
+  EFSFileSystemId:
+    Value: !Ref EFSFileSystem
+  ALBTargetGroupArn:
+    Value: !Ref ALBTargetGroup
+  VpcId:
+    Value: !Ref VPC

@@ -1,0 +1,54 @@
+name: Deploy WordPress to EKS (Dev)
+
+on:
+  push:
+    branches: [ dev ]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: wordpress-dev
+  EKS_CLUSTER_NAME: dev-eks
+  K8S_NAMESPACE: wordpress-dev
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::CHANGE_ME_ACCOUNT_ID:role/CHANGE_ME_DEV_GITHUB_ACTIONS_ROLE
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          IMAGE_TAG=${GITHUB_SHA::7}
+          docker build -t $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG
+          echo "IMAGE=$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+
+      - name: Inject image into manifest
+        run: |
+          sed -i "s|CHANGE_ME_DEV_ECR_IMAGE|${IMAGE}|g" k8s/wordpress-dev.yaml
+
+      - name: Apply manifests
+        run: |
+          kubectl apply -f k8s/wordpress-dev.yaml

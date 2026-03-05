@@ -1,0 +1,17 @@
+# alb-controller-values.yaml
+clusterName: test-eks
+
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::CHANGE_ME_ACCOUNT_ID:role/CHANGE_ME_ALB_CONTROLLER_ROLE
+
+region: us-east-1
+vpcId: vpc-CHANGE_ME
+
+enableShield: false
+enableWaf: false
+enableWafv2: false
+
+replicaCount: 2

@@ -1,0 +1,148 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wordpress-dev
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wp-db-secret
+  namespace: wordpress-dev
+type: Opaque
+stringData:
+  WORDPRESS_DB_USER: CHANGE_ME_DEV_DB_USERNAME
+  WORDPRESS_DB_PASSWORD: CHANGE_ME_DEV_DB_PASSWORD
+  WORDPRESS_DB_NAME: wordpress
+  WORDPRESS_DB_HOST: CHANGE_ME_DEV_AURORA_ENDPOINT:3306
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wp-config
+  namespace: wordpress-dev
+data:
+  WORDPRESS_TABLE_PREFIX: wp_
+  WORDPRESS_DEBUG: "true"
+  WORDPRESS_HOME: https://CHANGE_ME_DEV_WP_DOMAIN_NAME
+  WORDPRESS_SITEURL: https://CHANGE_ME_DEV_WP_DOMAIN_NAME
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-sc-dev
+provisioner: efs.csi.aws.com
+parameters:
+  fileSystemId: CHANGE_ME_DEV_EFS_FILESYSTEM_ID
+  directoryPerms: "755"
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wp-content-pvc
+  namespace: wordpress-dev
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc-dev
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  namespace: wordpress-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+        - name: wordpress
+          image: CHANGE_ME_DEV_ECR_IMAGE
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          envFrom:
+            - secretRef:
+                name: wp-db-secret
+            - configMapRef:
+                name: wp-config
+          env:
+            - name: WORDPRESS_DB_CHARSET
+              value: utf8mb4
+            - name: WORDPRESS_DB_COLLATE
+              value: ""
+            - name: HTTPS
+              value: "on"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /wp-login.php
+              port: 80
+            initialDelaySeconds: 30
+          volumeMounts:
+            - name: wp-content
+              mountPath: /var/www/html/wp-content
+      volumes:
+        - name: wp-content
+          persistentVolumeClaim:
+            claimName: wp-content-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress
+  namespace: wordpress-dev
+spec:
+  type: NodePort
+  selector:
+    app: wordpress
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30082
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: wordpress-tgb
+  namespace: wordpress-dev
+spec:
+  serviceRef:
+    name: wordpress
+    port: 80
+  targetGroupARN: CHANGE_ME_DEV_ALB_TARGET_GROUP_ARN
+  targetType: ip
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: wordpress
+  namespace: wordpress-dev
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: wordpress
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60

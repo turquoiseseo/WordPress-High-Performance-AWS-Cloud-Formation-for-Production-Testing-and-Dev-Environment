@@ -1,0 +1,13 @@
+controller:
+  serviceAccount:
+    create: true
+    name: efs-csi-controller-sa-test
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::CHANGE_ME_ACCOUNT_ID:role/CHANGE_ME_TEST_EFS_CSI_ROLE
+
+node:
+  serviceAccount:
+    create: true
+    name: efs-csi-node-sa-test
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::CHANGE_ME_ACCOUNT_ID:role/CHANGE_ME_TEST_EFS_CSI_ROLE

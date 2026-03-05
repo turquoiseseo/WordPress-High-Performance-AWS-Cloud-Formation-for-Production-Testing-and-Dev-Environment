@@ -1,0 +1,16 @@
+clusterName: test-eks
+
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller-test
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::CHANGE_ME_ACCOUNT_ID:role/CHANGE_ME_TEST_ALB_CONTROLLER_ROLE
+
+region: us-east-1
+vpcId: CHANGE_ME_TEST_VPC_ID
+
+enableShield: false
+enableWaf: false
+enableWafv2: false
+
+replicaCount: 1

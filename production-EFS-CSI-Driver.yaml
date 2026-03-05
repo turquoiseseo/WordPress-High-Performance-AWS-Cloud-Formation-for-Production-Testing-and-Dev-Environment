@@ -1,0 +1,14 @@
+# efs-csi-values.yaml
+controller:
+  serviceAccount:
+    create: true
+    name: efs-csi-controller-sa
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::CHANGE_ME_ACCOUNT_ID:role/CHANGE_ME_EFS_CSI_ROLE
+
+node:
+  serviceAccount:
+    create: true
+    name: efs-csi-node-sa
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::CHANGE_ME_ACCOUNT_ID:role/CHANGE_ME_EFS_CSI_ROLE

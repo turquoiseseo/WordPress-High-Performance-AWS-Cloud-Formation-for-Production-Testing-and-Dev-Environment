@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Testing WordPress on AWS using EKS, Aurora, EFS, ALB, CloudFront (Docker + Kubernetes)
+Description: Dev WordPress on AWS using EKS, Aurora, EFS, ALB (Docker + Kubernetes)
 
 Parameters:
   DBUsername:
@@ -10,10 +10,10 @@ Parameters:
     NoEcho: true
   SSLCertificateArn:
     Type: String
-    Description: ACM certificate for ALB + CloudFront
+    Description: ACM certificate for ALB (dev)
   WPDomainName:
     Type: String
-    Description: Testing domain name (e.g. test.example.com)
+    Description: Dev domain name (e.g. dev.example.com)
 
 Mappings:
   AZMap:
@@ -30,12 +30,12 @@ Resources:
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.20.0.0/16
+      CidrBlock: 10.2.0.0/16
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: test-vpc
+          Value: dev-vpc
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -50,63 +50,63 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.20.0.0/24
+      CidrBlock: 10.2.0.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ1]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: test-public-az1
+          Value: dev-public-az1
 
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.20.1.0/24
+      CidrBlock: 10.2.1.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ2]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: test-public-az2
+          Value: dev-public-az2
 
   PrivateAppSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.20.10.0/24
+      CidrBlock: 10.2.10.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ1]
       Tags:
         - Key: Name
-          Value: test-app-az1
+          Value: dev-app-az1
 
   PrivateAppSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.20.11.0/24
+      CidrBlock: 10.2.11.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ2]
       Tags:
         - Key: Name
-          Value: test-app-az2
+          Value: dev-app-az2
 
   PrivateDataSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.20.20.0/24
+      CidrBlock: 10.2.20.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ1]
       Tags:
         - Key: Name
-          Value: test-data-az1
+          Value: dev-data-az1
 
   PrivateDataSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.20.21.0/24
+      CidrBlock: 10.2.21.0/24
       AvailabilityZone: !FindInMap [AZMap, !Ref "AWS::Region", AZ2]
       Tags:
         - Key: Name
-          Value: test-data-az2
+          Value: dev-data-az2
 
   ############################################
   # NAT + Routing
@@ -124,13 +124,13 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
-  PublicSubnet1Assoc:
+  PublicSubnet1RouteTableAssoc:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicSubnet1
       RouteTableId: !Ref PublicRouteTable
 
-  PublicSubnet2Assoc:
+  PublicSubnet2RouteTableAssoc:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicSubnet2
@@ -178,7 +178,7 @@ Resources:
   ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: ALB SG
+      GroupDescription: Dev ALB SG
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -193,7 +193,7 @@ Resources:
   EKSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: EKS nodes SG
+      GroupDescription: Dev EKS nodes SG
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: -1
@@ -219,7 +219,7 @@ Resources:
   EKSCluster:
     Type: AWS::EKS::Cluster
     Properties:
-      Name: test-eks
+      Name: dev-eks
       Version: "1.29"
       RoleArn: !GetAtt EKSClusterRole.Arn
       ResourcesVpcConfig:
@@ -250,9 +250,9 @@ Resources:
       ClusterName: !Ref EKSCluster
       NodeRole: !GetAtt EKSNodeRole.Arn
       ScalingConfig:
-        DesiredSize: 2
+        DesiredSize: 1
         MinSize: 1
-        MaxSize: 6
+        MaxSize: 3
       Subnets:
         - !Ref PrivateAppSubnet1
         - !Ref PrivateAppSubnet2
@@ -267,7 +267,7 @@ Resources:
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: test db subnets
+      DBSubnetGroupDescription: dev db subnets
       SubnetIds:
         - !Ref PrivateDataSubnet1
         - !Ref PrivateDataSubnet2
@@ -287,7 +287,7 @@ Resources:
     Type: AWS::RDS::DBInstance
     Properties:
       DBClusterIdentifier: !Ref DBCluster
-      DBInstanceClass: db.t4g.medium
+      DBInstanceClass: db.t3.medium
       Engine: aurora-mysql
 
   ############################################
@@ -323,7 +323,7 @@ Resources:
   ALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: test-alb
+      Name: dev-alb
       Scheme: internet-facing
       Subnets:
         - !Ref PublicSubnet1
@@ -366,39 +366,16 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref ALBTargetGroup
 
-  ############################################
-  # CloudFront
-  ############################################
-
-  CloudFrontDistribution:
-    Type: AWS::CloudFront::Distribution
-    Properties:
-      DistributionConfig:
-        Enabled: true
-        Aliases:
-          - !Ref WPDomainName
-        DefaultCacheBehavior:
-          TargetOriginId: alb-origin
-          ViewerProtocolPolicy: redirect-to-https
-          AllowedMethods: [GET, HEAD, OPTIONS]
-          CachedMethods: [GET, HEAD]
-          ForwardedValues:
-            QueryString: true
-        Origins:
-          - Id: alb-origin
-            DomainName: !GetAtt ALB.DNSName
-            CustomOriginConfig:
-              OriginProtocolPolicy: https-only
-        ViewerCertificate:
-          AcmCertificateArn: !Ref SSLCertificateArn
-          SslSupportMethod: sni-only
-
 Outputs:
   ALBDNS:
     Value: !GetAtt ALB.DNSName
-  CloudFrontURL:
-    Value: !Sub "https://${WPDomainName}"
   EKSClusterName:
     Value: !Ref EKSCluster
   AuroraEndpoint:
     Value: !GetAtt DBCluster.Endpoint.Address
+  EFSFileSystemId:
+    Value: !Ref EFSFileSystem
+  ALBTargetGroupArn:
+    Value: !Ref ALBTargetGroup
+  VpcId:
+    Value: !Ref VPC
